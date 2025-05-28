@@ -1,6 +1,11 @@
 const std = @import("std");
 
-const ExVersion = enum { sdl1, sdl2, glex_x11, console };
+const ExVersion = enum {
+    sdl1,
+    sdl2,
+    glesx11,
+    console,
+};
 
 const Options = struct {
     opencv: bool = false,
@@ -16,10 +21,13 @@ fn getDefaultOpts(ver: ExVersion) Options {
         .sdl1 => .{ .aprs = true },
         .sdl2 => .{ .opencv = true },
         .console => .{ .aprs = true },
-        .glex_x11 => .{},
+        .glesx11 => .{},
     };
 }
-
+const BuildConfig = struct {
+    name: []const u8,
+    version: ExVersion,
+};
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -32,24 +40,12 @@ pub fn build(b: *std.Build) void {
     const use_vlc = b.option(bool, "vlc", "Enable VLC support");
     const use_dpf = b.option(bool, "dpf", "Enable DPF display support");
 
-    const BuildConfig = struct {
-        name: []const u8,
-        version: ExVersion,
-    };
-
-    const configs = [_]BuildConfig{
-        .{ .name = "sdl1", .version = .sdl1 },
-        .{ .name = "sdl2", .version = .sdl2 },
-        .{ .name = "gles-x11", .version = .glex_x11 },
-        .{ .name = "console", .version = .console },
-    };
-
     switch (target.result.os.tag) {
         .linux => {
             var default_step_deps = std.ArrayList(*std.Build.Step).init(b.allocator);
 
-            for (configs) |config| {
-                const defaults = getDefaultOpts(config.version);
+            for (std.meta.tags(ExVersion)) |config| {
+                const defaults = getDefaultOpts(config);
                 const exe = createGcsExecutable(b, .{
                     .target = target,
                     .optimize = optimize,
@@ -62,10 +58,10 @@ pub fn build(b: *std.Build) void {
                         .vlc = use_vlc orelse defaults.vlc,
                         .dpf = use_dpf orelse defaults.dpf,
                     },
-                    .build_type = config.version,
+                    .config = config,
                 });
 
-                const step = b.step(config.name, b.fmt("Build with {s}", .{config.name}));
+                const step = b.step(@tagName(config), b.fmt("Build with {s}", .{@tagName(config)}));
                 step.dependOn(&b.addInstallArtifact(exe, .{}).step);
                 default_step_deps.append(&b.addInstallArtifact(exe, .{}).step) catch unreachable;
             }
@@ -85,16 +81,11 @@ fn createGcsExecutable(
         optimize: std.builtin.OptimizeMode,
         base_dir: []const u8,
         opts: Options,
-        build_type: ExVersion,
+        config: ExVersion,
     },
 ) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
-        .name = switch (options.build_type) {
-            .sdl1 => "gcs-sdl1",
-            .sdl2 => "gcs-sdl2",
-            .glex_x11 => "gcs-glex_x11",
-            .console => "gcs-console",
-        },
+        .name = b.fmt("gcs-{s}", .{@tagName(options.config)}),
         .target = options.target,
         .optimize = options.optimize,
     });
@@ -268,7 +259,7 @@ fn createGcsExecutable(
     exe.linkLibrary(libxml2.artifact("xml"));
 
     // SDL and OpenGL libraries
-    switch (options.build_type) {
+    switch (options.config) {
         .sdl1 => {
             exe.linkSystemLibrary("SDL");
             exe.linkSystemLibrary("SDL_image");
@@ -345,7 +336,7 @@ fn createGcsExecutable(
             exe.root_module.addCMacro("SDLGL", "");
             exe.root_module.addCMacro("BASE_DIR", b.fmt("\"{s}\"", .{options.base_dir}));
         },
-        .glex_x11 => {
+        .glesx11 => {
             exe.linkSystemLibrary("SDL");
             exe.linkSystemLibrary("SDL_image");
             exe.linkSystemLibrary("SDL_net");
