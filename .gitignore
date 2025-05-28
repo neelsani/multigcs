@@ -40,3 +40,5 @@ utils/logdump
 utils/udevtest
 wifibc-tx
 build/
+zig-out
+.zig-cache

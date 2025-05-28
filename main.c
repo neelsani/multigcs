@@ -191,7 +191,6 @@ Ground GroundData;
 char keyboard_key[100];
 uint8_t keyboard_shift = 0;
 uint8_t keyboard_altgr = 0;
-SDL_Event event;
 int last_x = 0;
 int last_y = 0;
 int touch_fd = -1;
