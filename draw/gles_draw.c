@@ -5,6 +5,7 @@ TextureCache TexCache[MAX_TEXCACHE];
 GLfloat colors[4] = {1.0f, 0.0f, 0.0f, 1.0f};
 float aspect = 1.0;
 float alt_zoom = 700.0;
+SDL_Event event;
 
 void draw_circlePointer_f3(ESContext *esContext, float x1, float y1, float z1, float radius, float radius_inner, float start, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 	float x2 = x1 - cos(start * DEG2RAD) * radius;

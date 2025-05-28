@@ -4,6 +4,7 @@
 
 #define MAX_TEXCACHE 90
 #define MAX_ALTCACHE 8
+extern SDL_Event event;
 
 typedef struct {
 	char name[1024];

@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
                 .use_v4l = use_v4l,
                 .use_vlc = use_vlc,
                 .use_dpf = use_dpf,
-                .sdl_version = .sdl1,
+                .build_type = .sdl1,
             });
 
             // SDL2 version
@@ -42,15 +42,53 @@ pub fn build(b: *std.Build) void {
                 .use_v4l = use_v4l,
                 .use_vlc = use_vlc,
                 .use_dpf = use_dpf,
-                .sdl_version = .sdl2,
+                .build_type = .sdl2,
+            });
+
+            // gles-x11 version
+            const gles_x11_exe = createGcsExecutableLinux(b, .{
+                .target = target,
+                .optimize = optimize,
+                .base_dir = base_dir,
+                .use_opencv = use_opencv,
+                .use_aprs = use_aprs,
+                .use_wifibc = use_wifibc,
+                .use_v4l = use_v4l,
+                .use_vlc = use_vlc,
+                .use_dpf = use_dpf,
+                .build_type = .glex_x11,
+            });
+
+            // console version
+            const console_exe = createGcsExecutableLinux(b, .{
+                .target = target,
+                .optimize = optimize,
+                .base_dir = base_dir,
+                .use_opencv = use_opencv,
+                .use_aprs = use_aprs,
+                .use_wifibc = use_wifibc,
+                .use_v4l = use_v4l,
+                .use_vlc = use_vlc,
+                .use_dpf = use_dpf,
+                .build_type = .console,
             });
 
             // Build steps
             const sdl1_step = b.step("sdl1", "Build with SDL1");
             sdl1_step.dependOn(&b.addInstallArtifact(sdl1_exe, .{}).step);
+            b.default_step.dependOn(&b.addInstallArtifact(sdl1_exe, .{}).step);
 
             const sdl2_step = b.step("sdl2", "Build with SDL2");
             sdl2_step.dependOn(&b.addInstallArtifact(sdl2_exe, .{}).step);
+            b.default_step.dependOn(&b.addInstallArtifact(sdl2_exe, .{}).step);
+
+            const glex_x11_step = b.step("gles-x11", "Build with gles-x11");
+            glex_x11_step.dependOn(&b.addInstallArtifact(gles_x11_exe, .{}).step);
+            b.default_step.dependOn(&b.addInstallArtifact(gles_x11_exe, .{}).step);
+
+            const console_step = b.step("console", "Build with console");
+            console_step.dependOn(&b.addInstallArtifact(console_exe, .{}).step);
+            b.default_step.dependOn(&b.addInstallArtifact(console_exe, .{}).step);
         },
         else => {
             unreachable;
@@ -58,7 +96,7 @@ pub fn build(b: *std.Build) void {
     }
 }
 
-const SdlVersion = enum { sdl1, sdl2 };
+const SdlVersion = enum { sdl1, sdl2, glex_x11, console };
 
 fn createGcsExecutableLinux(
     b: *std.Build,
@@ -72,19 +110,19 @@ fn createGcsExecutableLinux(
         use_v4l: bool,
         use_vlc: bool,
         use_dpf: bool,
-        sdl_version: SdlVersion,
+        build_type: SdlVersion,
     },
 ) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
-        .name = switch (options.sdl_version) {
+        .name = switch (options.build_type) {
             .sdl1 => "gcs-sdl1",
             .sdl2 => "gcs-sdl2",
+            .glex_x11 => "gcs-glex_x11",
+            .console => "gcs-console",
         },
         .target = options.target,
         .optimize = options.optimize,
     });
-
-    const base_dir = "/usr/share/multigcs";
 
     // Add C source files from GCS variable in make.inc
     const gcs_sources = [_][]const u8{
@@ -141,21 +179,10 @@ fn createGcsExecutableLinux(
         "weather.c",
     };
 
-    // Common sources
-    const common_sources = [_][]const u8{
-        "draw/opencv.c",
-    };
-
-    // Extra objects
-    const extra_sources = [_][]const u8{
-        "draw/gl_draw.c",
-    };
-
     // Add all base source files
     exe.addCSourceFiles(.{
-        .files = &(gcs_sources ++ common_sources ++ extra_sources),
+        .files = &(gcs_sources),
         .flags = &[_][]const u8{
-            "-DSDLGL",
             "-O3",
             "-Wall",
             "-ggdb",
@@ -163,7 +190,6 @@ fn createGcsExecutableLinux(
             "-Wno-unused-variable",
             "-Wno-unused-but-set-variable",
             "-w",
-            b.fmt("-DBASE_DIR=\"{s}\"", .{options.base_dir}),
         },
     });
 
@@ -172,11 +198,9 @@ fn createGcsExecutableLinux(
         exe.addCSourceFile(.{
             .file = b.path("aprs.c"),
             .flags = &[_][]const u8{
-                "-DSDLGL",
                 "-O3",
                 "-Wall",
                 "-ggdb",
-                b.fmt("-DBASE_DIR=\"{s}\"", .{options.base_dir}),
             },
         });
     }
@@ -191,11 +215,9 @@ fn createGcsExecutableLinux(
         exe.addCSourceFiles(.{
             .files = &wifibc_sources,
             .flags = &[_][]const u8{
-                "-DSDLGL",
                 "-O3",
                 "-Wall",
                 "-ggdb",
-                b.fmt("-DBASE_DIR=\"{s}\"", .{base_dir}),
             },
         });
         exe.addIncludePath(b.path("wifibc"));
@@ -205,11 +227,9 @@ fn createGcsExecutableLinux(
         exe.addCSourceFile(.{
             .file = b.path("draw/vlcinput.c"),
             .flags = &[_][]const u8{
-                "-DSDLGL",
                 "-O3",
                 "-Wall",
                 "-ggdb",
-                b.fmt("-DBASE_DIR=\"{s}\"", .{base_dir}),
             },
         });
     }
@@ -223,11 +243,9 @@ fn createGcsExecutableLinux(
         exe.addCSourceFiles(.{
             .files = &dpf_sources,
             .flags = &[_][]const u8{
-                "-DSDLGL",
                 "-O3",
                 "-Wall",
                 "-ggdb",
-                b.fmt("-DBASE_DIR=\"{s}\"", .{base_dir}),
             },
         });
     }
@@ -261,24 +279,33 @@ fn createGcsExecutableLinux(
     exe.linkLibrary(libxml2.artifact("xml"));
 
     // SDL and OpenGL libraries
-    switch (options.sdl_version) {
+    switch (options.build_type) {
         .sdl1 => {
             exe.linkSystemLibrary("SDL");
             exe.linkSystemLibrary("SDL_image");
             exe.linkSystemLibrary("SDL_net");
+            exe.linkSystemLibrary("GL");
+            exe.linkSystemLibrary("GLU");
+            exe.linkSystemLibrary("GLEW");
             exe.addIncludePath(b.path("quirc"));
-
-            const sdl1_sources = [_][]const u8{
+            // Common sources
+            const common_sources = [_][]const u8{
+                "draw/opencv.c",
                 "quirc/decode.c",
                 "quirc/identify.c",
                 "quirc/quirc.c",
                 "quirc/version_db.c",
                 "quirc/qrcheck.c",
             };
+
+            // Extra objects
+            const extra_sources = [_][]const u8{
+                "draw/gl_draw.c",
+            };
+
             exe.addCSourceFiles(.{
-                .files = &sdl1_sources,
+                .files = &(common_sources ++ extra_sources),
                 .flags = &[_][]const u8{
-                    "-DSDLGL",
                     "-O3",
                     "-Wall",
                     "-ggdb",
@@ -286,11 +313,34 @@ fn createGcsExecutableLinux(
                     "-Wno-unused-variable",
                     "-Wno-unused-but-set-variable",
                     "-w",
-                    b.fmt("-DBASE_DIR=\"{s}\"", .{options.base_dir}),
                 },
             });
+
+            exe.root_module.addCMacro("SDLGL", "");
+            exe.root_module.addCMacro("BASE_DIR", b.fmt("\"{s}\"", .{options.base_dir}));
         },
         .sdl2 => {
+            // Common sources
+            const common_sources = [_][]const u8{
+                "draw/opencv.c",
+            };
+            // Extra objects
+            const extra_sources = [_][]const u8{
+                "draw/gl_draw.c",
+            };
+
+            exe.addCSourceFiles(.{
+                .files = &(common_sources ++ extra_sources),
+                .flags = &[_][]const u8{
+                    "-O3",
+                    "-Wall",
+                    "-ggdb",
+                    "-Wno-address-of-packed-member",
+                    "-Wno-unused-variable",
+                    "-Wno-unused-but-set-variable",
+                    "-w",
+                },
+            });
             //const SDL2 = b.dependency("SDL2", .{ .target = options.target, .optimize = options.optimize });
             //exe.linkLibrary(SDL2.artifact("SDL2"));
             exe.linkSystemLibrary("SDL2");
@@ -298,14 +348,90 @@ fn createGcsExecutableLinux(
             //const SDL2_image = b.dependency("SDL2_image", .{ .target = options.target, .optimize = options.optimize });
             //exe.linkLibrary(SDL2_image.artifact("SDL2_image"));
             exe.linkSystemLibrary("SDL2_image");
-
             exe.linkSystemLibrary("SDL2_net");
+            exe.linkSystemLibrary("GL");
+            exe.linkSystemLibrary("GLU");
+            exe.linkSystemLibrary("GLEW");
             exe.root_module.addCMacro("SDL2", "");
+            exe.root_module.addCMacro("SDLGL", "");
+            exe.root_module.addCMacro("BASE_DIR", b.fmt("\"{s}\"", .{options.base_dir}));
+        },
+        .glex_x11 => {
+            exe.linkSystemLibrary("SDL");
+            exe.linkSystemLibrary("SDL_image");
+            exe.linkSystemLibrary("SDL_net");
+            exe.linkSystemLibrary("EGL");
+            exe.linkSystemLibrary("GLESv2");
+            // Common sources
+            const common_sources = [_][]const u8{
+                "Common/esShader.c",
+                "Common/esTransform.c",
+                "Common/esShapes.c",
+                "Common/esUtil.c",
+            };
+            // Extra objects
+            const extra_sources = [_][]const u8{
+                "draw/gles_draw.c",
+            };
+
+            exe.addCSourceFiles(.{
+                .files = &(common_sources ++ extra_sources),
+                .flags = &[_][]const u8{
+                    "-O3",
+                    "-Wall",
+                    "-ggdb",
+                    "-Wno-address-of-packed-member",
+                    "-Wno-unused-variable",
+                    "-Wno-unused-but-set-variable",
+                    "-w",
+                },
+            });
+
+            exe.root_module.addCMacro("MESA", "");
+            exe.root_module.addCMacro("BASE_DIR", b.fmt("\"{s}\"", .{options.base_dir}));
+        },
+        .console => {
+            exe.linkSystemLibrary("SDL");
+            exe.linkSystemLibrary("SDL_image");
+            exe.linkSystemLibrary("SDL_net");
+            exe.linkSystemLibrary("GL");
+            exe.linkSystemLibrary("GLU");
+            exe.linkSystemLibrary("GLEW");
+            exe.addIncludePath(b.path("quirc"));
+            // Common sources
+            const common_sources = [_][]const u8{
+                "draw/opencv.c",
+                "quirc/decode.c",
+                "quirc/identify.c",
+                "quirc/quirc.c",
+                "quirc/version_db.c",
+                "quirc/qrcheck.c",
+            };
+
+            // Extra objects
+            const extra_sources = [_][]const u8{
+                "draw/gl_draw.c",
+            };
+
+            exe.addCSourceFiles(.{
+                .files = &(common_sources ++ extra_sources),
+                .flags = &[_][]const u8{
+                    "-O3",
+                    "-Wall",
+                    "-ggdb",
+                    "-Wno-address-of-packed-member",
+                    "-Wno-unused-variable",
+                    "-Wno-unused-but-set-variable",
+                    "-w",
+                },
+            });
+
+            exe.root_module.addCMacro("SDLGL", "");
+            exe.root_module.addCMacro("BASE_DIR", b.fmt("\"{s}\"", .{options.base_dir}));
+            exe.root_module.addCMacro("CONSOLE_ONLY", "");
+            exe.root_module.addCMacro("HTML_DRAWING", "");
         },
     }
-    exe.linkSystemLibrary("GL");
-    exe.linkSystemLibrary("GLU");
-    exe.linkSystemLibrary("GLEW");
 
     // XML, PNG, and other libraries
     exe.linkSystemLibrary("X11");
