@@ -1,116 +1,91 @@
 const std = @import("std");
 
+const ExVersion = enum { sdl1, sdl2, glex_x11, console };
+
+const Options = struct {
+    opencv: bool = false,
+    aprs: bool = false,
+    wifibc: bool = false,
+    v4l: bool = false,
+    vlc: bool = false,
+    dpf: bool = false,
+};
+
+fn getDefaultOpts(ver: ExVersion) Options {
+    return switch (ver) {
+        .sdl1 => .{ .aprs = true },
+        .sdl2 => .{ .opencv = true },
+        .console => .{ .aprs = true },
+        .glex_x11 => .{},
+    };
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-
-    // Configuration options
-    const use_opencv = b.option(bool, "opencv", "Enable OpenCV support") orelse false;
-    const use_aprs = b.option(bool, "aprs", "Enable APRS support") orelse true;
-    const use_wifibc = b.option(bool, "wifibc", "Enable WiFi broadcast support") orelse false;
-    const use_v4l = b.option(bool, "v4l", "Enable Video4Linux support") orelse false;
-    const use_vlc = b.option(bool, "vlc", "Enable VLC support") orelse false;
-    const use_dpf = b.option(bool, "dpf", "Enable DPF display support") orelse false;
-
-    // Version information
     const base_dir = "/usr/share/multigcs";
+
+    const use_opencv = b.option(bool, "opencv", "Enable OpenCV support");
+    const use_aprs = b.option(bool, "aprs", "Enable APRS support");
+    const use_wifibc = b.option(bool, "wifibc", "Enable WiFi broadcast support");
+    const use_v4l = b.option(bool, "v4l", "Enable Video4Linux support");
+    const use_vlc = b.option(bool, "vlc", "Enable VLC support");
+    const use_dpf = b.option(bool, "dpf", "Enable DPF display support");
+
+    const BuildConfig = struct {
+        name: []const u8,
+        version: ExVersion,
+    };
+
+    const configs = [_]BuildConfig{
+        .{ .name = "sdl1", .version = .sdl1 },
+        .{ .name = "sdl2", .version = .sdl2 },
+        .{ .name = "gles-x11", .version = .glex_x11 },
+        .{ .name = "console", .version = .console },
+    };
 
     switch (target.result.os.tag) {
         .linux => {
-            // SDL1 version (default)
-            const sdl1_exe = createGcsExecutableLinux(b, .{
-                .target = target,
-                .optimize = optimize,
-                .base_dir = base_dir,
-                .use_opencv = use_opencv,
-                .use_aprs = use_aprs,
-                .use_wifibc = use_wifibc,
-                .use_v4l = use_v4l,
-                .use_vlc = use_vlc,
-                .use_dpf = use_dpf,
-                .build_type = .sdl1,
-            });
+            var default_step_deps = std.ArrayList(*std.Build.Step).init(b.allocator);
 
-            // SDL2 version
-            const sdl2_exe = createGcsExecutableLinux(b, .{
-                .target = target,
-                .optimize = optimize,
-                .base_dir = base_dir,
-                .use_opencv = use_opencv,
-                .use_aprs = use_aprs,
-                .use_wifibc = use_wifibc,
-                .use_v4l = use_v4l,
-                .use_vlc = use_vlc,
-                .use_dpf = use_dpf,
-                .build_type = .sdl2,
-            });
+            for (configs) |config| {
+                const defaults = getDefaultOpts(config.version);
+                const exe = createGcsExecutable(b, .{
+                    .target = target,
+                    .optimize = optimize,
+                    .base_dir = base_dir,
+                    .opts = .{
+                        .opencv = use_opencv orelse defaults.opencv,
+                        .aprs = use_aprs orelse defaults.aprs,
+                        .wifibc = use_wifibc orelse defaults.wifibc,
+                        .v4l = use_v4l orelse defaults.v4l,
+                        .vlc = use_vlc orelse defaults.vlc,
+                        .dpf = use_dpf orelse defaults.dpf,
+                    },
+                    .build_type = config.version,
+                });
 
-            // gles-x11 version
-            const gles_x11_exe = createGcsExecutableLinux(b, .{
-                .target = target,
-                .optimize = optimize,
-                .base_dir = base_dir,
-                .use_opencv = use_opencv,
-                .use_aprs = use_aprs,
-                .use_wifibc = use_wifibc,
-                .use_v4l = use_v4l,
-                .use_vlc = use_vlc,
-                .use_dpf = use_dpf,
-                .build_type = .glex_x11,
-            });
+                const step = b.step(config.name, b.fmt("Build with {s}", .{config.name}));
+                step.dependOn(&b.addInstallArtifact(exe, .{}).step);
+                default_step_deps.append(&b.addInstallArtifact(exe, .{}).step) catch unreachable;
+            }
 
-            // console version
-            const console_exe = createGcsExecutableLinux(b, .{
-                .target = target,
-                .optimize = optimize,
-                .base_dir = base_dir,
-                .use_opencv = use_opencv,
-                .use_aprs = use_aprs,
-                .use_wifibc = use_wifibc,
-                .use_v4l = use_v4l,
-                .use_vlc = use_vlc,
-                .use_dpf = use_dpf,
-                .build_type = .console,
-            });
-
-            // Build steps
-            const sdl1_step = b.step("sdl1", "Build with SDL1");
-            sdl1_step.dependOn(&b.addInstallArtifact(sdl1_exe, .{}).step);
-            b.default_step.dependOn(&b.addInstallArtifact(sdl1_exe, .{}).step);
-
-            const sdl2_step = b.step("sdl2", "Build with SDL2");
-            sdl2_step.dependOn(&b.addInstallArtifact(sdl2_exe, .{}).step);
-            b.default_step.dependOn(&b.addInstallArtifact(sdl2_exe, .{}).step);
-
-            const glex_x11_step = b.step("gles-x11", "Build with gles-x11");
-            glex_x11_step.dependOn(&b.addInstallArtifact(gles_x11_exe, .{}).step);
-            b.default_step.dependOn(&b.addInstallArtifact(gles_x11_exe, .{}).step);
-
-            const console_step = b.step("console", "Build with console");
-            console_step.dependOn(&b.addInstallArtifact(console_exe, .{}).step);
-            b.default_step.dependOn(&b.addInstallArtifact(console_exe, .{}).step);
+            for (default_step_deps.items) |dep| {
+                b.default_step.dependOn(dep);
+            }
         },
-        else => {
-            unreachable;
-        },
+        else => unreachable,
     }
 }
 
-const SdlVersion = enum { sdl1, sdl2, glex_x11, console };
-
-fn createGcsExecutableLinux(
+fn createGcsExecutable(
     b: *std.Build,
     options: struct {
         target: std.Build.ResolvedTarget,
         optimize: std.builtin.OptimizeMode,
         base_dir: []const u8,
-        use_opencv: bool,
-        use_aprs: bool,
-        use_wifibc: bool,
-        use_v4l: bool,
-        use_vlc: bool,
-        use_dpf: bool,
-        build_type: SdlVersion,
+        opts: Options,
+        build_type: ExVersion,
     },
 ) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
@@ -123,7 +98,6 @@ fn createGcsExecutableLinux(
         .target = options.target,
         .optimize = options.optimize,
     });
-
     // Add C source files from GCS variable in make.inc
     const gcs_sources = [_][]const u8{
         "main.c",
@@ -194,7 +168,7 @@ fn createGcsExecutableLinux(
     });
 
     // Add conditional source files (same as before)
-    if (options.use_aprs) {
+    if (options.opts.aprs) {
         exe.addCSourceFile(.{
             .file = b.path("aprs.c"),
             .flags = &[_][]const u8{
@@ -203,9 +177,10 @@ fn createGcsExecutableLinux(
                 "-ggdb",
             },
         });
+        exe.root_module.addCMacro("USE_APRS", "");
     }
 
-    if (options.use_wifibc) {
+    if (options.opts.wifibc) {
         const wifibc_sources = [_][]const u8{
             "wifibc/wifibc.c",
             "wifibc/lib.c",
@@ -220,10 +195,20 @@ fn createGcsExecutableLinux(
                 "-ggdb",
             },
         });
+        exe.root_module.addCMacro("USE_WIFIBC", "");
         exe.addIncludePath(b.path("wifibc"));
+        exe.linkSystemLibrary("rt");
+        exe.linkSystemLibrary("pcap");
+        exe.linkSystemLibrary("avformat");
+        exe.linkSystemLibrary("avcodec");
+        exe.linkSystemLibrary("swscale");
+        exe.linkSystemLibrary("avutil");
+    }
+    if (options.opts.v4l) {
+        exe.root_module.addCMacro("USE_V4L", "");
     }
 
-    if (options.use_vlc) {
+    if (options.opts.vlc) {
         exe.addCSourceFile(.{
             .file = b.path("draw/vlcinput.c"),
             .flags = &[_][]const u8{
@@ -232,9 +217,11 @@ fn createGcsExecutableLinux(
                 "-ggdb",
             },
         });
+        exe.root_module.addCMacro("USE_V4L", "");
+        exe.linkSystemLibrary("vlc");
     }
 
-    if (options.use_dpf) {
+    if (options.opts.dpf) {
         const dpf_sources = [_][]const u8{
             "dpf/display_dpf.c",
             "dpf/dpflib.c",
@@ -248,6 +235,8 @@ fn createGcsExecutableLinux(
                 "-ggdb",
             },
         });
+        exe.root_module.addCMacro("DPF_DISPLAY", "");
+        exe.linkSystemLibrary("usb");
     }
 
     // Add include directories
@@ -445,7 +434,7 @@ fn createGcsExecutableLinux(
     //exe.linkSystemLibrary("z");
 
     // Conditional libraries (same as before)
-    if (options.use_opencv) {
+    if (options.opts.opencv) {
         exe.linkSystemLibrary("opencv_core");
         exe.linkSystemLibrary("opencv_imgproc");
         exe.linkSystemLibrary("opencv_imgcodecs");
