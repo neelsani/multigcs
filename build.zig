@@ -162,11 +162,7 @@ fn createGcsExecutable(
     if (options.opts.aprs) {
         exe.addCSourceFile(.{
             .file = b.path("aprs.c"),
-            .flags = &[_][]const u8{
-                "-O3",
-                "-Wall",
-                "-ggdb",
-            },
+            .flags = &[_][]const u8{ "-O3", "-Wall", "-ggdb", "-w" },
         });
         exe.root_module.addCMacro("USE_APRS", "");
     }
@@ -184,6 +180,7 @@ fn createGcsExecutable(
                 "-O3",
                 "-Wall",
                 "-ggdb",
+                "-w",
             },
         });
         exe.root_module.addCMacro("USE_WIFIBC", "");
@@ -202,11 +199,7 @@ fn createGcsExecutable(
     if (options.opts.vlc) {
         exe.addCSourceFile(.{
             .file = b.path("draw/vlcinput.c"),
-            .flags = &[_][]const u8{
-                "-O3",
-                "-Wall",
-                "-ggdb",
-            },
+            .flags = &[_][]const u8{ "-O3", "-Wall", "-ggdb", "-w" },
         });
         exe.root_module.addCMacro("USE_V4L", "");
         exe.linkSystemLibrary("vlc");
@@ -220,11 +213,7 @@ fn createGcsExecutable(
         };
         exe.addCSourceFiles(.{
             .files = &dpf_sources,
-            .flags = &[_][]const u8{
-                "-O3",
-                "-Wall",
-                "-ggdb",
-            },
+            .flags = &[_][]const u8{ "-O3", "-Wall", "-ggdb", "-w" },
         });
         exe.root_module.addCMacro("DPF_DISPLAY", "");
         exe.linkSystemLibrary("usb");
